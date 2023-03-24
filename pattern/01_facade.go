@@ -20,10 +20,12 @@ type RobotFacade struct {
 }
 
 func NewRobotFacade(adminLogin string, adminPassword string) *RobotFacade {
+	robotAuth := newRobotAuth(adminLogin, adminPassword)
+	kinematics := newKinematics(50, 10, robotAuth)
 	return &RobotFacade{
-		robotAuth:  newRobotAuth(adminLogin, adminPassword),
-		kinematics: newKinematics(50, 10),
-		sensors:    NewSensors(),
+		robotAuth:  robotAuth,
+		kinematics: kinematics,
+		sensors:    NewSensors(robotAuth, kinematics),
 	}
 }
 
@@ -40,6 +42,7 @@ func (rf *RobotFacade) MoveToPoint(coordinateX float64, coordinateY float64) err
 		return err
 	}
 	if realX == coordinateX && realY == coordinateY {
+		fmt.Println("Координаты достигнуты")
 		return nil
 	} else {
 		return errors.New("координаты не достигнуты")
@@ -77,20 +80,22 @@ func (ru *robotAuth) robotUserLogin(login string, password string) bool {
 
 // Часть с управлением
 type kinematics struct {
-	robotAuth
+	*robotAuth
 	theta1           float64
 	theta2           float64
 	wheelR           float64
 	singularityParam float64
 }
 
-func newKinematics(singularityParam float64, wheelR float64) *kinematics {
+func newKinematics(singularityParam float64, wheelR float64, auth *robotAuth) *kinematics {
 	if wheelR == 0 {
 		return nil
 	}
+	robotAuth := auth
 	return &kinematics{
 		singularityParam: singularityParam,
 		wheelR:           wheelR,
+		robotAuth:        robotAuth,
 	}
 }
 
@@ -98,9 +103,9 @@ func newKinematics(singularityParam float64, wheelR float64) *kinematics {
 func (k *kinematics) singularityCheck(coordinateX float64, coordinateY float64) error {
 	module := math.Pow(math.Pow(coordinateX, 2)+math.Pow(coordinateY, 2), 1/2)
 	if module >= k.singularityParam {
-		return nil
-	} else {
 		return errors.New("неверные координаты, выход за допустимую область")
+	} else {
+		return nil
 	}
 }
 
@@ -125,16 +130,22 @@ func (k *kinematics) sendCoordinates(theta1 float64, theta2 float64) bool {
 
 // Часть для работы с датчиками
 type Sensors struct {
-	kinematics
+	*robotAuth
+	*kinematics
 }
 
-func NewSensors() *Sensors {
-	return &Sensors{}
+func NewSensors(robotAuth *robotAuth, kinematics *kinematics) *Sensors {
+	return &Sensors{
+		kinematics: kinematics,
+		robotAuth:  robotAuth,
+	}
 }
 
 func (s *Sensors) readEncoders() (float64, float64, error) {
 	if s.kinematics.robotAuth.isAuthorized {
-		return s.kinematics.theta1, s.kinematics.theta2, nil
+		realX := s.kinematics.theta1 * s.wheelR
+		realY := s.kinematics.theta2 * s.wheelR
+		return realX, realY, nil
 	}
 	return 0, 0, errors.New("Нет доступа к датчикам, ошибка авториззации ")
 }
@@ -142,6 +153,7 @@ func (s *Sensors) readEncoders() (float64, float64, error) {
 // Работа "клиента" с роботом при помощи фасада
 func FacadeWork() error {
 	robotFacade := NewRobotFacade("admin", "admin")
+	robotFacade.robotAuth.robotUserLogin("admin", "admin")
 	err := robotFacade.MoveToPoint(3, 4)
 	if err != nil {
 		return err
