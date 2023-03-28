@@ -1,3 +1,2 @@
-Unix and Linux is best OS in the world
-I like MacOS, CentOS, Debian
-I don't use Windows!
+245:789    4567    M:4540    Admin    01:10:1980
+535:769    4987    M:3476    Sales    11:04:1978
