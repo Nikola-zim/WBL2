@@ -140,15 +140,15 @@ func telnet(flags *Flags) {
 		os.Exit(0)
 	}(conn)
 
-	// Устанавливаем первоначальный таймаут на ответ в 5 секунд
-	_ = conn.SetReadDeadline(time.Now().Add(time.Duration(5) * time.Second))
+	// Устанавливаем первоначальный таймаут на ответ в 15 секунд
+	_ = conn.SetReadDeadline(time.Now().Add(time.Duration(15) * time.Second))
 	for {
 		fmt.Print(">")
 
 		// Отправляем данные из консольного ввода в сокет
 		_, err = io.Copy(conn, os.Stdin)
 
-		_ = conn.SetReadDeadline(time.Now().Add(time.Duration(700) * time.Millisecond))
+		_ = conn.SetReadDeadline(time.Now().Add(time.Duration(500) * time.Millisecond))
 
 		// Принимаем данные из сокета в консольный вывод
 		_, err := io.Copy(os.Stdout, conn)

@@ -49,6 +49,7 @@ func getLinks(data []byte) []string {
 	}
 }
 
+// запись HTML-кода страницы в файл в указанной директории.
 func writeHTML(filename string, data []byte) error {
 	err := os.MkdirAll(filename, os.ModePerm)
 	if err != nil {
@@ -58,7 +59,8 @@ func writeHTML(filename string, data []byte) error {
 	return os.WriteFile(filename+"index.html", data, 0644)
 }
 
-func wget(url string, r bool) {
+// функция для загрузки веб-страниц
+func wget(url string, recursionDownload bool) {
 	fmt.Println("Downloading ", url)
 
 	resp, err := http.Get(url)
@@ -68,7 +70,12 @@ func wget(url string, r bool) {
 		return
 	}
 
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}(resp.Body)
 
 	data, err := io.ReadAll(resp.Body)
 
@@ -83,7 +90,8 @@ func wget(url string, r bool) {
 		return
 	}
 
-	if r {
+	// рекурсивное скачивание всех страниц по ссылкам в коде HTML
+	if recursionDownload {
 		links := getLinks(data)
 
 		for _, link := range links {

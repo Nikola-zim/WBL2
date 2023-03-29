@@ -72,7 +72,7 @@ type Logger struct {
 }
 
 // Инициалзирует scope
-func InitScope() *Scope {
+func NewScope() *Scope {
 	return &Scope{
 		srv: http.NewServeMux(),
 		logger: Logger{
@@ -91,9 +91,9 @@ func (s *Scope) startServer() {
 	s.srv.HandleFunc("/update_event", s.UpdateEvent)
 	s.srv.HandleFunc("/delete_event", s.DeleteEvent)
 
-	s.srv.HandleFunc("/events_for_day", s.EventsForDay)
-	s.srv.HandleFunc("/events_for_week", s.EventsForWeek)
-	s.srv.HandleFunc("/events_for_month", s.EventsForMonth)
+	s.srv.HandleFunc("/events_for_day", s.EventsForDayAdd)
+	s.srv.HandleFunc("/events_for_week", s.EventsForWeekAdd)
+	s.srv.HandleFunc("/events_for_month", s.EventsForMonthAdd)
 
 	log.Fatal(http.ListenAndServe("localhost:"+os.Getenv("SERVERPORT"), s.srv))
 }
@@ -252,7 +252,7 @@ func (s *Scope) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 // Возвращает события на заданный день
-func (s *Scope) EventsForDayFunc(userID int, date time.Time) ([]Event, error) {
+func (s *Scope) EventsForDayGetter(userID int, date time.Time) ([]Event, error) {
 	s.eventStore.RWMutex.RLock()
 	s.eventStore.RWMutex.RUnlock()
 
@@ -275,7 +275,7 @@ func (s *Scope) EventsForDayFunc(userID int, date time.Time) ([]Event, error) {
 }
 
 // Обработчик для /events_for_day
-func (s *Scope) EventsForDay(w http.ResponseWriter, r *http.Request) {
+func (s *Scope) EventsForDayAdd(w http.ResponseWriter, r *http.Request) {
 	s.logger.Println(r.URL)
 	if r.Method != http.MethodGet {
 		sendError(w, "Not correct method", http.StatusBadRequest)
@@ -288,7 +288,7 @@ func (s *Scope) EventsForDay(w http.ResponseWriter, r *http.Request) {
 		sendError(w, "Incorrect args", http.StatusBadRequest)
 		return
 	}
-	events, err := s.EventsForDayFunc(userID, date)
+	events, err := s.EventsForDayGetter(userID, date)
 	if err != nil {
 		sendError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -297,7 +297,7 @@ func (s *Scope) EventsForDay(w http.ResponseWriter, r *http.Request) {
 }
 
 // Возвращает события с разницей не более чем в неделю от заданной даты
-func (s *Scope) EventsForWeekFunc(userID int, date time.Time) ([]Event, error) {
+func (s *Scope) EventsForWeekGetter(userID int, date time.Time) ([]Event, error) {
 	s.eventStore.RWMutex.RLock()
 	s.eventStore.RWMutex.RUnlock()
 
@@ -322,7 +322,7 @@ func (s *Scope) EventsForWeekFunc(userID int, date time.Time) ([]Event, error) {
 }
 
 // Обработчик для /events_for_week
-func (s *Scope) EventsForWeek(w http.ResponseWriter, r *http.Request) {
+func (s *Scope) EventsForWeekAdd(w http.ResponseWriter, r *http.Request) {
 	s.logger.Println(r.URL)
 	if r.Method != http.MethodGet {
 		sendError(w, "Not correct method", http.StatusBadRequest)
@@ -335,7 +335,7 @@ func (s *Scope) EventsForWeek(w http.ResponseWriter, r *http.Request) {
 		sendError(w, "Incorrect args", http.StatusBadRequest)
 		return
 	}
-	events, err := s.EventsForWeekFunc(userID, date)
+	events, err := s.EventsForWeekGetter(userID, date)
 	if err != nil {
 		sendError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -344,7 +344,7 @@ func (s *Scope) EventsForWeek(w http.ResponseWriter, r *http.Request) {
 }
 
 // Возвращает события в заданном месяце
-func (s *Scope) EventsForMonthFunc(userID int, date time.Time) ([]Event, error) {
+func (s *Scope) EventsForMonthGetter(userID int, date time.Time) ([]Event, error) {
 	s.eventStore.RWMutex.RLock()
 	s.eventStore.RWMutex.RUnlock()
 
@@ -365,7 +365,7 @@ func (s *Scope) EventsForMonthFunc(userID int, date time.Time) ([]Event, error) 
 }
 
 // Обработчик для /events_for_month
-func (s *Scope) EventsForMonth(w http.ResponseWriter, r *http.Request) {
+func (s *Scope) EventsForMonthAdd(w http.ResponseWriter, r *http.Request) {
 	s.logger.Println(r.URL)
 	if r.Method != http.MethodGet {
 		sendError(w, "Not correct method", http.StatusBadRequest)
@@ -378,7 +378,7 @@ func (s *Scope) EventsForMonth(w http.ResponseWriter, r *http.Request) {
 		sendError(w, "Incorrect args", http.StatusBadRequest)
 		return
 	}
-	events, err := s.EventsForMonthFunc(userID, date)
+	events, err := s.EventsForMonthGetter(userID, date)
 	if err != nil {
 		sendError(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -423,6 +423,6 @@ func (d *MyDate) MarshalJSON() ([]byte, error) {
 }
 
 func main() {
-	scope := InitScope()
+	scope := NewScope()
 	scope.startServer()
 }

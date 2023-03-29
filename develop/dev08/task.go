@@ -3,12 +3,16 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/mitchellh/go-ps"
+	"io/ioutil"
+	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
+
+	gops "github.com/mitchellh/go-ps"
 )
 
 /*
@@ -25,119 +29,175 @@ import (
 Программа должна проходить все тесты. Код должен проходить проверки go vet и golint.
 */
 
-func CmdCd(c []string) {
-	myDirr, err := os.Getwd()
-	if err != nil {
-		return
-	}
-
-	if (len(c) > 1 && c[1] == "~") || len(c) == 1 {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return
-		}
-		os.Chdir(filepath.Join(home))
-	} else if len(c) > 1 {
-		os.Chdir(filepath.Join(myDirr, c[1]))
-	}
+type data struct {
+	cd      string
+	cdItems []string
+	pids    []int
+	delim   string
 }
 
-func CmdPwd(c []string) {
-	myDirr, err := os.Getwd()
-	if err != nil {
-		return
+var curData data
+
+func rightPath(dir string) string {
+	var s string
+
+	s = strings.ReplaceAll(dir, "/", curData.delim)
+	s = strings.ReplaceAll(dir, "\\", curData.delim)
+
+	if strings.HasSuffix(s, curData.delim) {
+		s = s[:len(s)-1]
 	}
-	fmt.Println(myDirr)
+
+	return s
 }
 
-func CmdEcho(c []string) {
-	for _, e := range c[1:] {
-		fmt.Print(e, " ")
-	}
+func showDir() {
 	fmt.Println()
+	items, err := ioutil.ReadDir(curData.cd)
+	pwd()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("%-50v%-15v%v\n", "Имя", "Размер", "Дата изменения")
+
+	var files []string
+
+	for _, i := range items {
+		files = append(files, i.Name())
+		fmt.Printf("%-50v%-15v%v\n", i.Name(), i.Size(), i.ModTime())
+	}
+
+	curData.cdItems = files
 }
 
-func CmdKill(c []string) {
-	for _, e := range c[1:] {
-		pid, err := strconv.Atoi(e)
-		if err != nil {
-			continue
-		}
-		pro, err := os.FindProcess(pid)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			continue
-		}
-		err = pro.Kill()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			continue
+func checkExists(dir string) bool {
+	_, err := os.Stat(dir)
+	return !os.IsNotExist(err)
+}
+
+func dirConraints(str string) bool {
+	for _, f := range curData.cdItems {
+		if f == str {
+			return true
 		}
 	}
+
+	return false
 }
 
-func CmdPs(c []string) {
-	processes, err := ps.Processes()
-	if err != nil {
+func cd(dir string) {
+	if dir == ".." {
+		curData.cd = filepath.Dir(curData.cd)
+		showDir()
 		return
 	}
-	fmt.Printf("%s\t%s\n", "PID", "COMMAND")
-	for _, proc := range processes {
-		fmt.Printf("%d\t%s\n", proc.Pid(), proc.Executable())
+
+	if dirConraints(dir) {
+		cd(curData.cd + "\\" + dir)
+	}
+
+	if checkExists(dir) {
+		curData.cd = rightPath(dir)
+	} else {
+		fmt.Println("Указанная директория не существует")
+	}
+
+	showDir()
+}
+
+func pwd() {
+	fmt.Println("Текущая директория - ", curData.cd)
+}
+
+func echo(str string) {
+	fmt.Println(str)
+}
+
+func ps() {
+	var pids []int
+
+	ps, _ := gops.Processes()
+	fmt.Printf("%-10v%-10v%v\n", "Pid", "PPid", "Executable")
+
+	for _, p := range ps {
+		pids = append(pids, p.PPid())
+		fmt.Printf("%-10v%-30v%v\n", p.Pid(), p.PPid(), p.Executable())
+	}
+
+	curData.pids = pids
+}
+
+func kill(pid string) {
+	procId, err := strconv.Atoi(pid)
+	if err != nil {
+		fmt.Println("PID неправильный ", pid)
+		return
+	}
+
+	proc, err := os.FindProcess(procId)
+	if err != nil {
+		fmt.Println("Процесс %s не существует - \n", procId)
+		return
+	}
+
+	err = proc.Kill()
+	if err != nil {
+		fmt.Println("Не удается убить процесс - ", err)
+		return
 	}
 }
 
-func CmdQuit(c []string) {
-	os.Exit(0)
+func fork() {
+	bin, _ := os.Executable()
+	args := []string{""}
+	env := os.Environ()
+	env = append(env, "cd="+curData.cd)
+	err := syscall.Exec(bin, args, env)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func main() {
-	// Получение текущей директории и вывод пути на экран
-	myDirr, err := os.Getwd()
-	if err != nil {
-		return
+	curData.cd, _ = os.Getwd()
+
+	if runtime.GOOS == "windows" {
+		curData.delim = "\\"
+	} else {
+		curData.delim = "/"
 	}
-	fmt.Print(myDirr, "> ")
 
-	reader := bufio.NewScanner(os.Stdin)
-	//цикл чтения из консоли
-	for reader.Scan() {
-		for _, cmd := range strings.Split(reader.Text(), ";") {
-			slice := strings.Fields(cmd)
-			if len(slice) == 0 {
-				myDirr, err := os.Getwd()
-				if err != nil {
-					return
-				}
-				fmt.Print(myDirr, "> ")
-				continue
-			}
+	showDir()
 
-			definedCommands := map[string]func(c []string){
-				"cd":   CmdCd,
-				"pwd":  CmdPwd,
-				"echo": CmdEcho,
-				"kill": CmdKill,
-				"quit": CmdQuit,
-				"ps":   CmdPs,
-			}
-			if f, ok := definedCommands[slice[0]]; ok {
-				f(slice)
-			} else {
-				var cmd *exec.Cmd
-				if len(slice) > 1 {
-					cmd = exec.Command(slice[0], slice[1:]...)
-				} else {
-					cmd = exec.Command(slice[0])
-				}
-				res, _ := cmd.Output()
-				fmt.Print(string(res))
-			}
+	scan := bufio.NewScanner(os.Stdin)
+
+	for scan.Scan() {
+		var args string
+
+		line := scan.Text()
+		sep := strings.Index(line, " ")
+		bash := strings.Split(line, " ")[0]
+
+		if sep > -1 {
+			args = line[sep+1:]
 		}
-		myDirr, err := os.Getwd()
-		if err != nil {
-			return
+
+		switch bash {
+		case "cd":
+			cd(args)
+		case "echo":
+			echo(args)
+		case "pwd":
+			pwd()
+		case "ps":
+			ps()
+		case "kill":
+			kill(args)
+		case "fork":
+			fork()
 		}
-		fmt.Print(myDirr, "> ")
 	}
 }
